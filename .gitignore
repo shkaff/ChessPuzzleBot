@@ -1,0 +1,10 @@
+/.DS_Store
+/.zhistory
+/decompress_zst.py
+/import chess.py
+/lichess_db.csv
+/lichess_db_puzzle.csv.zst
+/test.csv
+/tgbots
+/used_puzzles.json
+token.txt
