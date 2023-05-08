@@ -10,7 +10,7 @@ import chess.svg
 import pandas as pd
 import cairosvg
 
-with open('token.txt') as f:
+with open('token_test.txt') as f:
     TOKEN = f.read().strip()
 
 chat_puzzles = {}
@@ -31,6 +31,7 @@ chat_puzzles = load_used_puzzles()
 # Read the top 1000 puzzles CSV file
 puzzles = pd.read_csv("top_1000_puzzles.csv")
 puzzles["posted"] = False
+
 
 def escape_md_v2(text):
     escape_chars = r"_*[]()~`>#+-=|{}.!"
@@ -64,7 +65,9 @@ def generate_png(puzzle):
     return png_path
 
 
+
 def send_puzzle(update: Update, context: CallbackContext, puzzle):
+    board = chess.Board(puzzle['FEN'])
 
     chat_id = update.effective_chat.id
     # ...
@@ -91,8 +94,14 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle):
         turns_till_mate = 3
 
     # Solution under a spoiler
-    moves = puzzle['Moves'].split()[1:]
-    spoiler_text = f"|| {', '.join(moves)} ||"
+    moves = puzzle['Moves'].split(' ')
+    spoiler_text = "Solution: || "
+    for move in moves:
+        san_move = board.san(chess.Move.from_uci(move))
+        san_move = san_move.replace('+', r'\+')
+        spoiler_text += san_move + " "
+        board.push(chess.Move.from_uci(move))
+    spoiler_text += "||"
 
     # Compose the caption
     caption = f"*{first_move} moves first, mate in {turns_till_mate}*\n"\
