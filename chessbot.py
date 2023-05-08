@@ -91,7 +91,7 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle):
         turns_till_mate = 3
 
     # Solution under a spoiler
-    moves = puzzle['Moves'].split()
+    moves = puzzle['Moves'].split()[1:]
     spoiler_text = f"|| {', '.join(moves)} ||"
 
     # Compose the caption
