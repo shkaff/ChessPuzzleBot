@@ -11,7 +11,7 @@ import pandas as pd
 import cairosvg
 
 with open('token.txt') as f:
-    TOKEN = f.readlines()
+    TOKEN = f.read().strip()
 
 chat_puzzles = {}
 
