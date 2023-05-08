@@ -150,10 +150,10 @@ def help_command(update: Update, context: CallbackContext):
     help_text = (
         "This bot sends chess puzzles to solve with mate in 1,2,3 moves.\n Here are the available commands:\n"
         "\n"
-        "/random - Sends a random puzzle\n"
-        "/random 1,2,3 - Specifies the number of moves till mate\n"
-        "/today - Shows today's puzzle\n"
-        "/help - Displays this help message\n"
+        "/random_puzzle - Sends a random puzzle\n"
+        "/random_puzzle 1,2,3 - Specifies the number of moves till mate\n"
+        "/today_puzzle - Shows today's puzzle\n"
+        "/help_chess - Displays this help message\n"
         "\n"
         "A daily puzzle will be posted automatically at 9 AM every day."
     )
@@ -166,9 +166,9 @@ def main():
     dp = updater.dispatcher
 
     # Add command handlers
-    dp.add_handler(CommandHandler("random", random_puzzle))
-    dp.add_handler(CommandHandler("today", today_puzzle))
-    dp.add_handler(CommandHandler("help", help_command))
+    dp.add_handler(CommandHandler("random_puzzle", random_puzzle))
+    dp.add_handler(CommandHandler("today_puzzle", today_puzzle))
+    dp.add_handler(CommandHandler("help_chess", help_command))
 
     
 
