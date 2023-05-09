@@ -1,10 +1,11 @@
 import os
 import json
+import re
 import logging
-from datetime import time
+from datetime import time, datetime
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
-
+from pytz import timezone, utc
 import chess
 import chess.svg
 import pandas as pd
@@ -64,7 +65,12 @@ def generate_png(puzzle):
     cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=png_path)
     return png_path
 
-
+def escape_reserved_characters(san_move):
+    reserved_characters = ['+', '*', '_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for character in reserved_characters:
+        san_move = san_move.replace(character, '\\' + character)
+    
+    return san_move
 
 def send_puzzle(update: Update, context: CallbackContext, puzzle):
     board = chess.Board(puzzle['FEN'])
@@ -95,17 +101,23 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle):
 
     # Solution under a spoiler
     moves = puzzle['Moves'].split(' ')
-    spoiler_text = "Solution: || "
+    print(moves)
+    spoiler_text = ""
+    last_move = True
     for move in moves:
-        san_move = board.san(chess.Move.from_uci(move))
-        san_move = san_move.replace('+', r'\+')
-        spoiler_text += san_move + " "
-        board.push(chess.Move.from_uci(move))
-    spoiler_text += "||"
+        if last_move:
+            san_move = board.san(chess.Move.from_uci(move))
+            board.push(chess.Move.from_uci(move))
+            last_move = False
+        else:
+            san_move = board.san(chess.Move.from_uci(move))
+            spoiler_text += san_move + " "
+            board.push(chess.Move.from_uci(move))
 
+    spoiler_text = escape_md_v2(spoiler_text)
     # Compose the caption
     caption = f"*{first_move} moves first, mate in {turns_till_mate}*\n"\
-              f"*Solution:* {spoiler_text}\n"\
+              f"*Solution:* ||{spoiler_text}||\n"\
               "*Puzzle URL:*" + escape_md_v2("https://lichess.org/training/" + f"{puzzle['PuzzleId']}") + "\n"
 
     with open(png_path, "rb") as f:
@@ -168,6 +180,13 @@ def help_command(update: Update, context: CallbackContext):
     )
     update.message.reply_text(help_text)
 
+
+def get_cet_time(hour, minute):
+    cet_tz = timezone('CET')
+    local_tz = utc.localize(datetime.utcnow()).astimezone(cet_tz).tzinfo
+    local_time = cet_tz.localize(datetime.combine(datetime.today(), time(hour, minute))).astimezone(local_tz).time()
+    return local_time
+
 def main():
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -180,10 +199,11 @@ def main():
     dp.add_handler(CommandHandler("help_chess", help_command))
 
     
-
     # Schedule daily_puzzle job
+    cet_hour, cet_minute = 14, 0
+    local_time = get_cet_time(cet_hour, cet_minute)
     job_queue = updater.job_queue
-    job_queue.run_daily(daily_puzzle, time(hour=9, minute=0), days=(0, 1, 2, 3, 4, 5, 6), context=dp)
+    job_queue.run_daily(daily_puzzle, time(hour=local_time.hour, minute=local_time.minute), days=(0, 1, 2, 3, 4, 5, 6), context=dp)
 
     # Start the bot
     updater.start_polling()
