@@ -1,16 +1,18 @@
 import os
 import json
+import re
 import logging
-from datetime import time
+from datetime import time, datetime,timedelta
 from telegram import Update
+from apscheduler.schedulers.background import BackgroundScheduler
 from telegram.ext import Updater, CommandHandler, CallbackContext
-
+from pytz import timezone, utc
 import chess
 import chess.svg
 import pandas as pd
 import cairosvg
 
-with open('token.txt') as f:
+with open('token_test.txt') as f:
     TOKEN = f.read().strip()
 
 chat_puzzles = {}
@@ -31,6 +33,7 @@ chat_puzzles = load_used_puzzles()
 # Read the top 1000 puzzles CSV file
 puzzles = pd.read_csv("top_1000_puzzles.csv")
 puzzles["posted"] = False
+
 
 def escape_md_v2(text):
     escape_chars = r"_*[]()~`>#+-=|{}.!"
@@ -63,18 +66,24 @@ def generate_png(puzzle):
     cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=png_path)
     return png_path
 
+def escape_reserved_characters(san_move):
+    reserved_characters = ['+', '*', '_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for character in reserved_characters:
+        san_move = san_move.replace(character, '\\' + character)
+    
+    return san_move
 
-def send_puzzle(update: Update, context: CallbackContext, puzzle):
+def send_puzzle(update: Update, context: CallbackContext, puzzle, chat_id = None):
 
-    chat_id = update.effective_chat.id
+    chat_id = chat_id if chat_id else update.effective_chat.id
+
+    board = chess.Board(puzzle['FEN'])
     # ...
 
     if chat_id not in chat_puzzles:
         chat_puzzles[chat_id] = []
     chat_puzzles[chat_id].append(puzzle['PuzzleId'])
     png_path = generate_png(puzzle)
-    save_used_puzzles()
-
     # Save the updated chat_puzzles dictionary to a file
     save_used_puzzles()
     # Determine who moves first
@@ -91,35 +100,49 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle):
         turns_till_mate = 3
 
     # Solution under a spoiler
-    moves = puzzle['Moves'].split()[1:]
-    spoiler_text = f"|| {', '.join(moves)} ||"
+    moves = puzzle['Moves'].split(' ')
+    spoiler_text = ""
+    last_move = True
+    for move in moves:
+        if last_move:
+            san_move = board.san(chess.Move.from_uci(move))
+            board.push(chess.Move.from_uci(move))
+            last_move = False
+        else:
+            san_move = board.san(chess.Move.from_uci(move))
+            spoiler_text += san_move + " "
+            board.push(chess.Move.from_uci(move))
 
+    spoiler_text = escape_md_v2(spoiler_text)
     # Compose the caption
     caption = f"*{first_move} moves first, mate in {turns_till_mate}*\n"\
-              f"*Solution:* {spoiler_text}\n"\
+              f"*Solution:* ||{spoiler_text}||\n"\
               "*Puzzle URL:*" + escape_md_v2("https://lichess.org/training/" + f"{puzzle['PuzzleId']}") + "\n"
 
     with open(png_path, "rb") as f:
-        context.bot.send_photo(chat_id=update.effective_chat.id, photo=f, caption=caption, parse_mode='MarkdownV2')
+        context.bot.send_photo(chat_id, photo=f, caption=caption, parse_mode='MarkdownV2')
     os.remove(png_path)
     # Save the updated chat_puzzles dictionary to a file
 
 def today_puzzle(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
-    if chat_id in chat_puzzles and chat_puzzles[chat_id]:
-        puzzle_id = chat_puzzles[chat_id][-1]
+    if str(chat_id) in chat_puzzles:
+        puzzle_id = chat_puzzles[str(chat_id)][-1]
         puzzle = puzzles.loc[puzzles['PuzzleId'] == puzzle_id].iloc[0]
         send_puzzle(update, context, puzzle)
     else:
         update.message.reply_text("There's no puzzle for today yet. Please wait for the daily puzzle or use the /random command.")
 
+    
 def daily_puzzle(context: CallbackContext):
     global puzzles
     unposted_puzzles = puzzles.loc[puzzles["posted"] == False]
     if not unposted_puzzles.empty:
         puzzle = unposted_puzzles.iloc[0]
-        send_puzzle(context.job.context, context, puzzle)
+        for chat_id in chat_puzzles:
+            send_puzzle(None, context, puzzle, chat_id)
         puzzles.at[puzzle.name, "posted"] = True
+
 
 def parse_args(args):
     if not args:
@@ -159,6 +182,14 @@ def help_command(update: Update, context: CallbackContext):
     )
     update.message.reply_text(help_text)
 
+
+def start_scheduler(dp):
+    scheduler = BackgroundScheduler()
+    daily_puzzle_time = time(hour=12, minute=40)
+    scheduler.add_job(lambda: daily_puzzle(CallbackContext.from_update(Update(0), dp)), 'cron', hour=daily_puzzle_time.hour, minute=daily_puzzle_time.minute)
+    scheduler.start()
+
+
 def main():
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -168,13 +199,10 @@ def main():
     # Add command handlers
     dp.add_handler(CommandHandler("random_puzzle", random_puzzle))
     dp.add_handler(CommandHandler("today_puzzle", today_puzzle))
+    dp.add_handler(CommandHandler("daily_puzzle", daily_puzzle))
     dp.add_handler(CommandHandler("help_chess", help_command))
 
-    
-
-    # Schedule daily_puzzle job
-    job_queue = updater.job_queue
-    job_queue.run_daily(daily_puzzle, time(hour=9, minute=0), days=(0, 1, 2, 3, 4, 5, 6), context=dp)
+    start_scheduler(dp)    # # Schedule daily_puzzle job
 
     # Start the bot
     updater.start_polling()
