@@ -12,7 +12,7 @@ import chess.svg
 import pandas as pd
 import cairosvg
 
-with open('token_test.txt') as f:
+with open('token.txt') as f:
     TOKEN = f.read().strip()
 
 chat_puzzles = {}
@@ -185,7 +185,7 @@ def help_command(update: Update, context: CallbackContext):
 
 def start_scheduler(dp):
     scheduler = BackgroundScheduler()
-    daily_puzzle_time = time(hour=12, minute=40)
+    daily_puzzle_time = time(hour=9, minute=0)
     scheduler.add_job(lambda: daily_puzzle(CallbackContext.from_update(Update(0), dp)), 'cron', hour=daily_puzzle_time.hour, minute=daily_puzzle_time.minute)
     scheduler.start()
 
