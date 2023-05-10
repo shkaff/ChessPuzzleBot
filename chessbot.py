@@ -2,8 +2,9 @@ import os
 import json
 import re
 import logging
-from datetime import time, datetime
+from datetime import time, datetime,timedelta
 from telegram import Update
+from apscheduler.schedulers.background import BackgroundScheduler
 from telegram.ext import Updater, CommandHandler, CallbackContext
 from pytz import timezone, utc
 import chess
@@ -72,18 +73,17 @@ def escape_reserved_characters(san_move):
     
     return san_move
 
-def send_puzzle(update: Update, context: CallbackContext, puzzle):
-    board = chess.Board(puzzle['FEN'])
+def send_puzzle(update: Update, context: CallbackContext, puzzle, chat_id = None):
 
-    chat_id = update.effective_chat.id
+    chat_id = chat_id if chat_id else update.effective_chat.id
+
+    board = chess.Board(puzzle['FEN'])
     # ...
 
     if chat_id not in chat_puzzles:
         chat_puzzles[chat_id] = []
     chat_puzzles[chat_id].append(puzzle['PuzzleId'])
     png_path = generate_png(puzzle)
-    save_used_puzzles()
-
     # Save the updated chat_puzzles dictionary to a file
     save_used_puzzles()
     # Determine who moves first
@@ -101,7 +101,6 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle):
 
     # Solution under a spoiler
     moves = puzzle['Moves'].split(' ')
-    print(moves)
     spoiler_text = ""
     last_move = True
     for move in moves:
@@ -121,26 +120,29 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle):
               "*Puzzle URL:*" + escape_md_v2("https://lichess.org/training/" + f"{puzzle['PuzzleId']}") + "\n"
 
     with open(png_path, "rb") as f:
-        context.bot.send_photo(chat_id=update.effective_chat.id, photo=f, caption=caption, parse_mode='MarkdownV2')
+        context.bot.send_photo(chat_id, photo=f, caption=caption, parse_mode='MarkdownV2')
     os.remove(png_path)
     # Save the updated chat_puzzles dictionary to a file
 
 def today_puzzle(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
-    if chat_id in chat_puzzles and chat_puzzles[chat_id]:
-        puzzle_id = chat_puzzles[chat_id][-1]
+    if str(chat_id) in chat_puzzles:
+        puzzle_id = chat_puzzles[str(chat_id)][-1]
         puzzle = puzzles.loc[puzzles['PuzzleId'] == puzzle_id].iloc[0]
         send_puzzle(update, context, puzzle)
     else:
         update.message.reply_text("There's no puzzle for today yet. Please wait for the daily puzzle or use the /random command.")
 
+    
 def daily_puzzle(context: CallbackContext):
     global puzzles
     unposted_puzzles = puzzles.loc[puzzles["posted"] == False]
     if not unposted_puzzles.empty:
         puzzle = unposted_puzzles.iloc[0]
-        send_puzzle(context.job.context, context, puzzle)
+        for chat_id in chat_puzzles:
+            send_puzzle(None, context, puzzle, chat_id)
         puzzles.at[puzzle.name, "posted"] = True
+
 
 def parse_args(args):
     if not args:
@@ -181,11 +183,12 @@ def help_command(update: Update, context: CallbackContext):
     update.message.reply_text(help_text)
 
 
-def get_cet_time(hour, minute):
-    cet_tz = timezone('CET')
-    local_tz = utc.localize(datetime.utcnow()).astimezone(cet_tz).tzinfo
-    local_time = cet_tz.localize(datetime.combine(datetime.today(), time(hour, minute))).astimezone(local_tz).time()
-    return local_time
+def start_scheduler(dp):
+    scheduler = BackgroundScheduler()
+    daily_puzzle_time = time(hour=12, minute=40)
+    scheduler.add_job(lambda: daily_puzzle(CallbackContext.from_update(Update(0), dp)), 'cron', hour=daily_puzzle_time.hour, minute=daily_puzzle_time.minute)
+    scheduler.start()
+
 
 def main():
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -196,14 +199,10 @@ def main():
     # Add command handlers
     dp.add_handler(CommandHandler("random_puzzle", random_puzzle))
     dp.add_handler(CommandHandler("today_puzzle", today_puzzle))
+    dp.add_handler(CommandHandler("daily_puzzle", daily_puzzle))
     dp.add_handler(CommandHandler("help_chess", help_command))
 
-    
-    # Schedule daily_puzzle job
-    cet_hour, cet_minute = 14, 0
-    local_time = get_cet_time(cet_hour, cet_minute)
-    job_queue = updater.job_queue
-    job_queue.run_daily(daily_puzzle, time(hour=local_time.hour, minute=local_time.minute), days=(0, 1, 2, 3, 4, 5, 6), context=dp)
+    start_scheduler(dp)    # # Schedule daily_puzzle job
 
     # Start the bot
     updater.start_polling()
