@@ -138,7 +138,7 @@ def daily_puzzle(context: CallbackContext):
     global puzzles
     unposted_puzzles = puzzles.loc[puzzles["posted"] == False]
     if not unposted_puzzles.empty:
-        puzzle = unposted_puzzles.iloc[0]
+        puzzle = unposted_puzzles.sample(1).iloc[0]
         for chat_id in chat_puzzles:
             send_puzzle(None, context, puzzle, chat_id)
         puzzles.at[puzzle.name, "posted"] = True
@@ -185,7 +185,7 @@ def help_command(update: Update, context: CallbackContext):
 
 def start_scheduler(dp):
     scheduler = BackgroundScheduler()
-    daily_puzzle_time = time(hour=9, minute=0)
+    daily_puzzle_time = time(hour=7, minute=0)
     scheduler.add_job(lambda: daily_puzzle(CallbackContext.from_update(Update(0), dp)), 'cron', hour=daily_puzzle_time.hour, minute=daily_puzzle_time.minute)
     scheduler.start()
 
