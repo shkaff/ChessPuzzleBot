@@ -222,7 +222,7 @@ def help_command(update: Update, context: CallbackContext):
 
 def start_scheduler(dp):
     scheduler = BackgroundScheduler()
-    daily_puzzle_time = time(hour=10, minute=23)
+    daily_puzzle_time = time(hour=7, minute=00)
     scheduler.add_job(lambda: daily_puzzle(CallbackContext.from_update(Update(0), dp)), 'cron', hour=daily_puzzle_time.hour, minute=daily_puzzle_time.minute)
     scheduler.start()
 
