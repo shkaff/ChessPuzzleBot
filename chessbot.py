@@ -80,7 +80,7 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle, chat_id = None
     board = chess.Board(puzzle['FEN'])
     # ...
     if chat_id in chat_puzzles:
-        chat_puzzles[chat_id]["puzzles"].append(puzzle['PuzzleId'])
+        chat_puzzles[chat_id]["used_puzzles"].append(puzzle['PuzzleId'])
 
     png_path = generate_png(puzzle)
     # Save the updated chat_puzzles dictionary to a file
@@ -177,7 +177,7 @@ def random_puzzle(update: Update, context: CallbackContext):
 def start_command(update: Update, context: CallbackContext):
     chat_id = str(update.effective_chat.id)
     if chat_id not in chat_puzzles:
-        chat_puzzles[chat_id] = {"puzzles": [], "daily": False}
+        chat_puzzles[chat_id] = {"used_puzzles": [], "daily": False}
         update.message.reply_text("This chat has been added to the list.")
         save_used_puzzles()  # Don't forget to save the updated list to a file
     else:
