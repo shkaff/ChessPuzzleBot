@@ -234,7 +234,7 @@ def main():
     dp = updater.dispatcher
 
     # Add command handlers
-    dp.add_handler(CommandHandler("start", start_command))
+    dp.add_handler(CommandHandler("start_chess", start_command))
     dp.add_handler(CommandHandler("add_daily", add_daily_command))
     dp.add_handler(CommandHandler("remove_daily", remove_daily_command))
 
