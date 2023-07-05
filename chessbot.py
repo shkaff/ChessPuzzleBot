@@ -12,7 +12,7 @@ import chess.svg
 import pandas as pd
 import cairosvg
 
-with open('token_test.txt') as f:
+with open('token.txt') as f:
     TOKEN = f.read().strip()
 
 chat_puzzles = {}
