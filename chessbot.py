@@ -12,7 +12,7 @@ import chess.svg
 import pandas as pd
 import cairosvg
 
-with open('token.txt') as f:
+with open('token_test.txt') as f:
     TOKEN = f.read().strip()
 
 chat_puzzles = {}
@@ -75,14 +75,13 @@ def escape_reserved_characters(san_move):
 
 def send_puzzle(update: Update, context: CallbackContext, puzzle, chat_id = None):
 
-    chat_id = chat_id if chat_id else update.effective_chat.id
+    chat_id = str(chat_id if chat_id else update.effective_chat.id)
 
     board = chess.Board(puzzle['FEN'])
     # ...
+    if chat_id in chat_puzzles:
+        chat_puzzles[chat_id]["puzzles"].append(puzzle['PuzzleId'])
 
-    if chat_id not in chat_puzzles:
-        chat_puzzles[chat_id] = []
-    chat_puzzles[chat_id].append(puzzle['PuzzleId'])
     png_path = generate_png(puzzle)
     # Save the updated chat_puzzles dictionary to a file
     save_used_puzzles()
@@ -124,14 +123,17 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle, chat_id = None
     os.remove(png_path)
     # Save the updated chat_puzzles dictionary to a file
 
-def today_puzzle(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    if str(chat_id) in chat_puzzles:
-        puzzle_id = chat_puzzles[str(chat_id)][-1]
-        puzzle = puzzles.loc[puzzles['PuzzleId'] == puzzle_id].iloc[0]
-        send_puzzle(update, context, puzzle)
-    else:
-        update.message.reply_text("There's no puzzle for today yet. Please wait for the daily puzzle or use the /random command.")
+# def today_puzzle(update: Update, context: CallbackContext):
+#     chat_id = str(update.effective_chat.id)
+#     if chat_id in chat_puzzles:
+#         if chat_puzzles[chat_id]['puzzles']:
+#             puzzle_id = chat_puzzles[chat_id]['puzzles'][-1]
+#             puzzle = puzzles.loc[puzzles['PuzzleId'] == puzzle_id].iloc[0]
+#             send_puzzle(update, context, puzzle)
+#         else:
+#             update.message.reply_text("There's no puzzle for today yet. Please wait for the daily puzzle or use the /random_puzzle command.")
+#     else:
+#         update.message.reply_text("This chat is not on the chat list. Please add it using /start_chess command first.")
 
     
 def daily_puzzle(context: CallbackContext):
@@ -140,8 +142,11 @@ def daily_puzzle(context: CallbackContext):
     if not unposted_puzzles.empty:
         puzzle = unposted_puzzles.sample(1).iloc[0]
         for chat_id in chat_puzzles:
-            send_puzzle(None, context, puzzle, chat_id)
+            if chat_puzzles[chat_id]['daily']:  # Only send to chats with daily set to True
+                send_puzzle(None, context, puzzle, chat_id)
         puzzles.at[puzzle.name, "posted"] = True
+        save_used_puzzles()  # Save the updated chat_puzzles dictionary to a file
+
 
 
 def parse_args(args):
@@ -165,27 +170,59 @@ def random_puzzle(update: Update, context: CallbackContext):
     else:
         filtered_puzzles = puzzles
 
+
     puzzle = filtered_puzzles.sample(1).iloc[0]
     send_puzzle(update, context, puzzle)
 
+def start_command(update: Update, context: CallbackContext):
+    chat_id = str(update.effective_chat.id)
+    if chat_id not in chat_puzzles:
+        chat_puzzles[chat_id] = {"puzzles": [], "daily": False}
+        update.message.reply_text("This chat has been added to the list.")
+        save_used_puzzles()  # Don't forget to save the updated list to a file
+    else:
+        update.message.reply_text("This chat is already on the list.")
+
+def add_daily_command(update: Update, context: CallbackContext):
+    chat_id = str(update.effective_chat.id)
+    if chat_id in chat_puzzles:
+        if chat_puzzles[chat_id]["daily"]:
+            update.message.reply_text("This chat is already on the daily puzzles list.")
+        else:
+            chat_puzzles[chat_id]["daily"] = True
+            update.message.reply_text("This chat has been added to the daily puzzles list.")
+        save_used_puzzles()
+    else:
+        update.message.reply_text("This chat is not on the chat list. Please add it using /start_chess command first.")
+
+def remove_daily_command(update: Update, context: CallbackContext):
+    chat_id = str(update.effective_chat.id)
+    if chat_id in chat_puzzles:
+        chat_puzzles[chat_id]["daily"] = False
+        update.message.reply_text("This chat has been removed from the daily puzzles list.")
+        save_used_puzzles()
+    else:
+        update.message.reply_text("This chat is not on the chat list. Please add it using /start_chess command first.")
 
 def help_command(update: Update, context: CallbackContext):
     help_text = (
         "This bot sends chess puzzles to solve with mate in 1,2,3 moves.\n Here are the available commands:\n"
         "\n"
+        "/start_chess - Adds the chat to the chat list to keep track of used puzzles. Without that tracking used puzzles won't work.\n"
+        "/add_daily — Adds posting daily puzzle. The puzzle is posted at 9am CEST.\n"
+        "/remove_daily — Removes posting daily puzzle. Other commands are still available\n"
         "/random_puzzle - Sends a random puzzle\n"
         "/random_puzzle 1,2,3 - Specifies the number of moves till mate\n"
         "/today_puzzle - Shows today's puzzle\n"
         "/help_chess - Displays this help message\n"
         "\n"
-        "A daily puzzle will be posted automatically at 9 AM every day."
+        "A daily puzzle will be posted automatically at 9 AM every day.\n\n"
     )
     update.message.reply_text(help_text)
 
-
 def start_scheduler(dp):
     scheduler = BackgroundScheduler()
-    daily_puzzle_time = time(hour=7, minute=0)
+    daily_puzzle_time = time(hour=10, minute=23)
     scheduler.add_job(lambda: daily_puzzle(CallbackContext.from_update(Update(0), dp)), 'cron', hour=daily_puzzle_time.hour, minute=daily_puzzle_time.minute)
     scheduler.start()
 
@@ -197,8 +234,12 @@ def main():
     dp = updater.dispatcher
 
     # Add command handlers
+    dp.add_handler(CommandHandler("start", start_command))
+    dp.add_handler(CommandHandler("add_daily", add_daily_command))
+    dp.add_handler(CommandHandler("remove_daily", remove_daily_command))
+
     dp.add_handler(CommandHandler("random_puzzle", random_puzzle))
-    dp.add_handler(CommandHandler("today_puzzle", today_puzzle))
+    #dp.add_handler(CommandHandler("today_puzzle", today_puzzle))
     dp.add_handler(CommandHandler("daily_puzzle", daily_puzzle))
     dp.add_handler(CommandHandler("help_chess", help_command))
 
