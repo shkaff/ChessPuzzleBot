@@ -213,7 +213,6 @@ def help_command(update: Update, context: CallbackContext):
         "/remove_daily — Removes posting daily puzzle. Other commands are still available\n"
         "/random_puzzle - Sends a random puzzle\n"
         "/random_puzzle 1,2,3 - Specifies the number of moves till mate\n"
-        "/today_puzzle - Shows today's puzzle\n"
         "/help_chess - Displays this help message\n"
         "\n"
         "A daily puzzle will be posted automatically at 9 AM every day.\n\n"
