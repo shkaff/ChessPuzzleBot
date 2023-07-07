@@ -135,18 +135,21 @@ def send_puzzle(update: Update, context: CallbackContext, puzzle, chat_id = None
 #     else:
 #         update.message.reply_text("This chat is not on the chat list. Please add it using /start_chess command first.")
 
-    
+
 def daily_puzzle(context: CallbackContext):
     global puzzles
     unposted_puzzles = puzzles.loc[puzzles["posted"] == False]
     if not unposted_puzzles.empty:
         puzzle = unposted_puzzles.sample(1).iloc[0]
         for chat_id in chat_puzzles:
-            if chat_puzzles[chat_id]['daily']:  # Only send to chats with daily set to True
-                send_puzzle(None, context, puzzle, chat_id)
+            if chat_puzzles[chat_id]['daily']:
+                try:
+                    send_puzzle(None, context, puzzle, chat_id)
+                    time.sleep(3)  # Wait for 3 seconds
+                except Exception as e:
+                    print(f"Failed to send message to chat {chat_id}. Error: {e}")
         puzzles.at[puzzle.name, "posted"] = True
         save_used_puzzles()  # Save the updated chat_puzzles dictionary to a file
-
 
 
 def parse_args(args):
