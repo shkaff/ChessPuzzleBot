@@ -1,0 +1,1 @@
+This bot sends puzzles from top 1000 of the [open lichess database](https://database.lichess.org/#puzzles). It can send a random puzzle every day at 9am CEST to your chat. It tracks already used puzzles to avoid repetitions.
